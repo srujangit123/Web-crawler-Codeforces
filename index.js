@@ -34,11 +34,26 @@ app.post("/", (req, res) => {
           res.attachment(__dirname + "/Data/Problems", 'Codeforces-Solutions');
           archive.pipe(res);
           archive.directory(__dirname + "/Data/Problems", 'Codeforces-Solutions');
-          archive.finalize().then( ()=> {
-            deletedata();
+          archive.finalize()
+          .then( async ()=> {
+            fs.unlink(__dirname + "/Data/solutions.zip", (err) => {
+              if(err) throw err;
+              console.log("Deleted solutions.zip file");
+              const directory = __dirname + "/Data/Problems";
 
-          });
+              fs.readdir(directory, (err, files) => {
+                if (err) throw err;
+            
+                for (const file of files) {
+                  fs.unlink(path.join(directory, file), err => {
+                    if (err) throw err;
+                  });
+                }
+              });
+            });
 
+          })
+          
           // fse.emptyDir(__dirname + "/Data/Problems", err => {
           //   if(err) return console.log(err);
 
@@ -60,7 +75,7 @@ async function getstatus(handle) {
 
     try {
       await scrape(results);
-      console.log("DONE");
+      console.log("DONE " + handle + " solutions downloaded");
     }
     catch(error) {
       console.log(error);
