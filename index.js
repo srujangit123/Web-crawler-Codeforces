@@ -3,64 +3,104 @@ const axios = require("axios");
 const bodyParser = require("body-parser");
 const cheerio = require("cheerio");
 const fs = require("fs");
+const ejs = require("ejs");
+const archiver = require("archiver");
+const fse = require("fs-extra");
 const app = express();
+const path = require("path");
 
+app.set("view engine", "ejs");
 app.use(bodyParser.urlencoded({ extended: false }));
+app.use(express.static("public"));
 
+app.get("/", (req, res)=> {
+  res.render("home");
+})
 
-let contestID = "";
-let solutionID = "";
-let handle = "geek23";
+app.post("/", (req, res) => {
+      const usernameorhandle = req.body.userName;
+      getstatus(usernameorhandle).then ( ()=> {
+          var output = fs.createWriteStream(__dirname + '/Data/solutions.zip');
+          var archive = archiver('zip', {
+            zlib: { level: 9 } // Sets the compression level.
+          });
+          output.on('close', function() {
+            console.log(archive.pointer() + ' total bytes');
+            console.log('archiver has been finalized and the output file descriptor has closed.');
+          });
+          output.on('end', function() {
+            console.log('Data has been drained');
+          });
+          res.attachment(__dirname + "/Data/Problems", 'Codeforces-Solutions');
+          archive.pipe(res);
+          archive.directory(__dirname + "/Data/Problems", 'Codeforces-Solutions');
+          archive.finalize().then( ()=> {
+            deletedata();
 
-const status = "https://codeforces.com/api/user.status?handle=" + handle + "&from=1";
+          });
 
-var submissions;
-let correctanswerssubmiited = 0;
-axios.get(status)
-  .then(response => {
-    submissions = response.data;
-    // console.log(submissions);
-    if(submissions.status === 'OK'){
-      // console.log(submissions);
-      let results = submissions.result;
-      results.forEach(result => {
-        if(result.verdict === 'OK'){
-          correctanswerssubmiited++;
-          let solutionID = result.id;
-          let contestID = result.contestId;
-          let solutionlink = "https://codeforces.com/contest/" + contestID + "/submission/" + solutionID;
-          // console.log(solutionlink);
-          axios.get(solutionlink)
-            .then(solutionPage => {
-              const html = solutionPage.data;
-              const $ = cheerio.load(html);
-              const solution = $('#program-source-text').text();
-              // console.log(solution);
-              const path = "/home/srujan/Desktop/crawlerapp/Problems/" + result.problem.name + ".cpp";
-              fs.writeFile(path, solution, function(err){
-                if(err){
-                  console.log(err);
-                }
-                else{
-                  console.log("Saved files");
-                }
-              })
-            })
-            .catch( error => {
-              console.log("HTML PARSE ERROR");
-            })
-        }
+          // fse.emptyDir(__dirname + "/Data/Problems", err => {
+          //   if(err) return console.log(err);
 
-      })
+          //   console.log("Deleted all problem files");
+          // })
+          // deletefiles();
+          // fse.emptyDirSync(__dirname + "/Data/Problems");
+        })
+        //deleting only zip file works fine
+})
+
+async function getstatus(handle) {
+
+  const response = await axios.get("https://codeforces.com/api/user.status?handle=" + handle + "&from=1")
+
+  if(response.data.status === 'OK') {
+
+    let results = response.data.result;
+
+    try {
+      await scrape(results);
+      console.log("DONE");
     }
-    else {
-      console.log(submissions.comment);
+    catch(error) {
+      console.log(error);
     }
-    console.log("Correct answers submitted till now is" + correctanswerssubmiited);
+  }
+}
+
+
+async function scrape(results) {
+  for (const result of results) {
+    if(result.verdict === 'OK') {
+      const solutionPage = await axios.get("https://codeforces.com/contest/" + result.contestId + "/submission/" + result.id);
+      const $ = cheerio.load(solutionPage.data);
+      const path = "/home/srujan/Desktop/crawlerapp/Data/Problems/" + result.problem.name + ".cpp";
+      try {
+        await fs.promises.writeFile(path, $('#program-source-text').text());
+        console.log("Saved file");
+      } catch(err) { console.log(err) }
+    }
+  }
+}
+ function deletedata(){
+  fs.unlink(__dirname + "/Data/solutions.zip", (err) => {
+    if(err) throw err;
+    console.log("Deleted solutions.zip file");
   })
-  .catch(error => {
-    // handle error
-    console.log(error);
-  });
 
-//
+  const directory = __dirname + "/Data/Problems";
+
+  fs.readdir(directory, (err, files) => {
+    if (err) throw err;
+
+    for (const file of files) {
+      fs.unlink(path.join(directory, file), err => {
+        if (err) throw err;
+      });
+    }
+  });
+}
+
+app.listen(3000, () =>{
+  console.log("server running on port 3000");
+});
