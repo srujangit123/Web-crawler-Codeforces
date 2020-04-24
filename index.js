@@ -8,6 +8,7 @@ const archiver = require("archiver");
 const fse = require("fs-extra");
 const app = express();
 const path = require("path");
+const PORT = process.env.PORT || 3000;
 
 app.set("view engine", "ejs");
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -116,6 +117,5 @@ async function scrape(results) {
   });
 }
 
-app.listen(3000, () =>{
-  console.log("server running on port 3000");
-});
+app.listen(PORT, () => 
+  console.log(`Listening on ${ PORT }`));
