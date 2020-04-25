@@ -19,9 +19,22 @@ app.get("/", (req, res)=> {
 })
 
 app.post("/", (req, res) => {
-      const usernameorhandle = req.body.userName;
+     const usernameorhandle = req.body.userName;
+      var solndir = __dirname + "/" + req.body.usernameorhandle;
+      if (!fs.existsSync(__dirname + "/" + usernameorhandle)){
+        fs.mkdirSync(__dirname + "/" + usernameorhandle, (err) => {
+            if(err){
+              console.log(err);
+            }
+            else {
+              console.log(usernameorhandle + " folder created in root directory.");
+            }
+          });
+      }
+
+
       getstatus(usernameorhandle).then ( ()=> {
-          var output = fs.createWriteStream(__dirname + '/Data/solutions.zip');
+          var output = fs.createWriteStream(__dirname + '/solutions.zip');
           var archive = archiver('zip', {
             zlib: { level: 9 } // Sets the compression level.
           });
@@ -32,15 +45,15 @@ app.post("/", (req, res) => {
           output.on('end', function() {
             console.log('Data has been drained');
           });
-          res.attachment(__dirname + "/Data/Problems", 'Codeforces-Solutions');
+          res.attachment(__dirname + "/" + usernameorhandle, 'Codeforces-Solutions');
           archive.pipe(res);
-          archive.directory(__dirname + "/Data/Problems", 'Codeforces-Solutions');
+          archive.directory(__dirname + "/" + usernameorhandle , 'Codeforces-Solutions');
           archive.finalize()
           .then( async ()=> {
-            fs.unlink(__dirname + "/Data/solutions.zip", (err) => {
+            fs.unlink(__dirname + "/solutions.zip", (err) => {
               if(err) throw err;
               console.log("Deleted solutions.zip file");
-              const directory = __dirname + "/Data/Problems";
+              const directory = __dirname + "/" + usernameorhandle;
 
               fs.readdir(directory, (err, files) => {
                 if (err) throw err;
@@ -75,7 +88,7 @@ async function getstatus(handle) {
     let results = response.data.result;
 
     try {
-      await scrape(results);
+      await scrape(results, handle);
       console.log("DONE " + handle + " solutions downloaded");
     }
     catch(error) {
@@ -85,12 +98,12 @@ async function getstatus(handle) {
 }
 
 
-async function scrape(results) {
+async function scrape(results, handle) {
   for (const result of results) {
     if(result.verdict === 'OK') {
       const solutionPage = await axios.get("https://codeforces.com/contest/" + result.contestId + "/submission/" + result.id);
       const $ = cheerio.load(solutionPage.data);
-      const path = "/home/srujan/Desktop/crawlerapp/Data/Problems/" + result.problem.name + ".cpp";
+      const path = __dirname + "/" + handle + "/" +  result.problem.name + ".cpp";
       try {
         await fs.promises.writeFile(path, $('#program-source-text').text());
         console.log("Saved file");
@@ -99,7 +112,7 @@ async function scrape(results) {
   }
 }
  function deletedata(){
-  fs.unlink(__dirname + "/Data/solutions.zip", (err) => {
+  fs.unlink(__dirname + "/solutions.zip", (err) => {
     if(err) throw err;
     console.log("Deleted solutions.zip file");
   })
