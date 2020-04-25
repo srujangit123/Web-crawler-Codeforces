@@ -19,6 +19,7 @@ app.get("/", (req, res)=> {
 })
 
 app.post("/", (req, res) => {
+    req.setTimeout(0); // 
      const usernameorhandle = req.body.userName;
       var solndir = __dirname + "/" + req.body.usernameorhandle;
       if (!fs.existsSync(__dirname + "/" + usernameorhandle)){
@@ -32,54 +33,28 @@ app.post("/", (req, res) => {
           });
       }
 
+    //   var output = fs.createWriteStream(__dirname + '/solutions.zip');
+      var archive = archiver('zip', {
+        zlib: { level: 9 } // Sets the compression level.
+      });
+      archive.on('end', function() {
+        console.log('Archive wrote %d bytes', archive.pointer());
+        });
+      res.attachment("Problems.zip");
+      archive.pipe(res);
+      getstatus(usernameorhandle, archive).then ( ()=> {
 
-      getstatus(usernameorhandle).then ( ()=> {
-          var output = fs.createWriteStream(__dirname + '/solutions.zip');
-          var archive = archiver('zip', {
-            zlib: { level: 9 } // Sets the compression level.
-          });
-          output.on('close', function() {
-            console.log(archive.pointer() + ' total bytes');
-            console.log('archiver has been finalized and the output file descriptor has closed.');
-          });
-          output.on('end', function() {
-            console.log('Data has been drained');
-          });
-          res.attachment(__dirname + "/" + usernameorhandle, 'Codeforces-Solutions');
-          archive.pipe(res);
-          archive.directory(__dirname + "/" + usernameorhandle , 'Codeforces-Solutions');
-          archive.finalize()
-          .then( async ()=> {
-            fs.unlink(__dirname + "/solutions.zip", (err) => {
-              if(err) throw err;
-              console.log("Deleted solutions.zip file");
-              const directory = __dirname + "/" + usernameorhandle;
-
-              fs.readdir(directory, (err, files) => {
-                if (err) throw err;
-            
-                for (const file of files) {
-                  fs.unlink(path.join(directory, file), err => {
-                    if (err) throw err;
-                  });
-                }
-              });
-            });
-
+            // archive.on('end', function() {
+            // console.log('Archive wrote %d bytes', archive.pointer());
+            // });
+        //   res.attachment(__dirname + "/" + usernameorhandle, 'Codeforces-Solutions'); // Name of zip file
+        //   archive.pipe(res);
+        //   archive.directory(__dirname + "/" + usernameorhandle , 'Codeforces-Solutions');
+          archive.finalize();
           })
-          
-          // fse.emptyDir(__dirname + "/Data/Problems", err => {
-          //   if(err) return console.log(err);
-
-          //   console.log("Deleted all problem files");
-          // })
-          // deletefiles();
-          // fse.emptyDirSync(__dirname + "/Data/Problems");
-        })
-        //deleting only zip file works fine
 })
 
-async function getstatus(handle) {
+async function getstatus(handle, archive) {
 
   const response = await axios.get("https://codeforces.com/api/user.status?handle=" + handle + "&from=1")
 
@@ -88,7 +63,7 @@ async function getstatus(handle) {
     let results = response.data.result;
 
     try {
-      await scrape(results, handle);
+      await scrape(results, handle, archive);
       console.log("DONE " + handle + " solutions downloaded");
     }
     catch(error) {
@@ -98,36 +73,21 @@ async function getstatus(handle) {
 }
 
 
-async function scrape(results, handle) {
+async function scrape(results, handle, archive) {
   for (const result of results) {
     if(result.verdict === 'OK') {
       const solutionPage = await axios.get("https://codeforces.com/contest/" + result.contestId + "/submission/" + result.id);
       const $ = cheerio.load(solutionPage.data);
-      const path = __dirname + "/" + handle + "/" +  result.problem.name + ".cpp";
+    //   const path = __dirname + "/" + handle + "/" +  result.problem.name + ".cpp";
       try {
-        await fs.promises.writeFile(path, $('#program-source-text').text());
-        console.log("Saved file");
+        // await fs.promises.writeFile(path, $('#program-source-text').text());
+        // console.log("Saved file");
+        // archive.file(result.problem.name + ".cpp", {name: result.problem.name + ".cpp"});
+        await archive.append($('#program-source-text').text(), {name: result.problem.name + ".cpp"})
+        console.log("saved file");
       } catch(err) { console.log(err) }
     }
   }
-}
- function deletedata(){
-  fs.unlink(__dirname + "/solutions.zip", (err) => {
-    if(err) throw err;
-    console.log("Deleted solutions.zip file");
-  })
-
-  const directory = __dirname + "/Data/Problems";
-
-  fs.readdir(directory, (err, files) => {
-    if (err) throw err;
-
-    for (const file of files) {
-      fs.unlink(path.join(directory, file), err => {
-        if (err) throw err;
-      });
-    }
-  });
 }
 
 app.listen(PORT, () => 
